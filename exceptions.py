@@ -21,3 +21,23 @@ class MinimumBalanceError(BankingError):
 
 class AccountError(BankingError):
     """Raised when an account operation is invalid."""
+
+
+class CustomerAlreadyExistsError(BankingError):
+    """Raised when registering a duplicate customer."""
+
+
+class CustomerNotFoundError(BankingError):
+    """Raised when a customer cannot be found."""
+
+
+class AccountNotFoundError(BankingError):
+    """Raised when an account cannot be found."""
+
+
+class AccountOwnershipError(AccountError):
+    """Raised when a customer tries to access another customer's account."""
+
+
+class AccountNumberGenerationError(BankingError):
+    """Raised when a unique account number cannot be generated."""
