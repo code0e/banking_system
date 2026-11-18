@@ -110,7 +110,6 @@ class BankService:
         """Generate a unique ten-digit account number."""
 
         for _ in range(self.MAX_ACCOUNT_NUMBER_ATTEMPTS):
-
             number = str(
                 secrets.randbelow(9_000_000_000)
                 + 1_000_000_000
@@ -233,3 +232,134 @@ class BankService:
         """Return the number of registered accounts."""
 
         return len(self._accounts)
+
+    # -------------------------
+    # DEPOSIT OPERATIONS
+    # -------------------------
+
+    def deposit(
+        self,
+        account_number: str,
+        amount: Decimal,
+        customer_id: Optional[str] = None,
+    ):
+        """
+        Deposit money into an account.
+
+        The account model validates the amount and records
+        the successful deposit in its transaction history.
+        """
+
+        account = self.get_account(
+            account_number,
+            customer_id,
+        )
+
+        account.deposit(amount)
+
+        return account.transactions[-1]
+
+    # -------------------------
+    # WITHDRAWAL OPERATIONS
+    # -------------------------
+
+    def withdraw(
+        self,
+        account_number: str,
+        amount: Decimal,
+        customer_id: Optional[str] = None,
+    ):
+        """
+        Withdraw money from an account.
+
+        The account model enforces its own withdrawal rules,
+        including savings minimum balances and current-account
+        overdraft limits.
+        """
+
+        account = self.get_account(
+            account_number,
+            customer_id,
+        )
+
+        account.withdraw(amount)
+
+        return account.transactions[-1]
+
+    # -------------------------
+    # TRANSACTION HISTORY
+    # -------------------------
+
+    def get_transaction_history(
+        self,
+        account_number: str,
+        customer_id: Optional[str] = None,
+    ):
+        """Retrieve a read-only snapshot of an account's transactions."""
+
+        account = self.get_account(
+            account_number,
+            customer_id,
+        )
+
+        return account.transactions
+
+    # -------------------------
+    # ACCOUNT STATEMENTS
+    # -------------------------
+
+    def generate_statement(
+        self,
+        account_number: str,
+        customer_id: Optional[str] = None,
+    ) -> str:
+        """Generate a readable statement for an account."""
+
+        account = self.get_account(
+            account_number,
+            customer_id,
+        )
+
+        lines = [
+            "=" * 55,
+            "                 LOGICBANK",
+            "              ACCOUNT STATEMENT",
+            "=" * 55,
+            f"Customer: {account.owner.full_name}",
+            f"Account Number: {account.account_number}",
+            f"Account Type: {type(account).__name__}",
+            "-" * 55,
+            "TRANSACTION HISTORY",
+            "-" * 55,
+        ]
+
+        transactions = account.transactions
+
+        if not transactions:
+            lines.append("No transactions recorded.")
+
+        for transaction in transactions:
+            timestamp = transaction.timestamp.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            transaction_type = (
+                transaction.transaction_type.value
+            )
+
+            lines.append(
+                f"{timestamp} | "
+                f"{transaction_type:<12} | "
+                f"NGN {transaction.amount:,.2f} | "
+                f"Ref: {transaction.reference}"
+            )
+
+        lines.extend([
+            "-" * 55,
+            f"Available Balance: NGN {account.balance:,.2f}",
+            "=" * 55,
+            "          Thank you for banking with us.",
+            "=" * 55,
+        ])
+
+        return "\n".join(lines)
