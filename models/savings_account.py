@@ -10,12 +10,7 @@ from utils.validators import to_money
 
 
 class SavingsAccount(BankAccount):
-    """Bank account that requires a configurable minimum balance.
-
-    The minimum balance is checked when the account is opened and whenever a
-    withdrawal is attempted. A withdrawal that would take the balance below
-    the configured floor is rejected.
-    """
+    """Account that must retain its configured minimum balance."""
 
     def __init__(
         self,
@@ -24,23 +19,10 @@ class SavingsAccount(BankAccount):
         opening_balance: Decimal = Decimal("0.00"),
         minimum_balance: Decimal = Decimal("1000.00"),
     ) -> None:
-        """Initialize a savings account with its minimum-balance rule.
-
-        Args:
-            owner: Customer who owns the account.
-            account_number: Unique account number.
-            opening_balance: Initial account balance.
-            minimum_balance: Lowest permitted balance after a withdrawal.
-                Zero disables the minimum-balance restriction.
-
-        Raises:
-            ValidationError: If the opening balance is below the required
-                minimum balance.
-        """
+        """Initialize the savings account and validate its opening balance."""
         self.minimum_balance = to_money(
             minimum_balance, allow_zero=True
         )
-
         opening_balance = to_money(
             opening_balance, allow_zero=True
         )
@@ -50,15 +32,18 @@ class SavingsAccount(BankAccount):
                 "Opening balance must meet the minimum balance requirement."
             )
 
-        super().__init__(
-            owner,
-            account_number,
-            opening_balance,
-        )
+        super().__init__(owner, account_number, opening_balance)
 
     def withdraw(self, amount: Decimal) -> Transaction:
-        """Withdraw money while preserving the minimum balance."""
+        """Withdraw while preserving the configured minimum balance."""
         return self._complete_withdrawal(
+            amount,
+            self.minimum_balance,
+        )
+
+    def _validate_transfer_out(self, amount: Decimal) -> Decimal:
+        """Prevent outgoing transfers from breaching the savings minimum."""
+        return self._validate_withdrawal(
             amount,
             self.minimum_balance,
         )

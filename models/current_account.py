@@ -9,12 +9,7 @@ from utils.validators import to_money
 
 
 class CurrentAccount(BankAccount):
-    """Current account that can optionally support an overdraft.
-
-    The overdraft limit defaults to zero, meaning withdrawals cannot exceed
-    the available balance. When a positive limit is configured, the balance
-    may become negative, but never lower than the negative overdraft limit.
-    """
+    """Current account with an optional overdraft facility."""
 
     def __init__(
         self,
@@ -23,30 +18,22 @@ class CurrentAccount(BankAccount):
         opening_balance: Decimal = Decimal("0.00"),
         overdraft_limit: Decimal = Decimal("0.00"),
     ) -> None:
-        """Initialize a current account.
-
-        Args:
-            owner: Customer who owns the account.
-            account_number: Unique account number.
-            opening_balance: Initial account balance.
-            overdraft_limit: Maximum permitted amount below zero. The
-                default of zero disables overdraft use.
-        """
+        """Initialize a current account with its overdraft limit."""
         self.overdraft_limit = to_money(
             overdraft_limit, allow_zero=True
         )
-
-        super().__init__(
-            owner,
-            account_number,
-            opening_balance,
-        )
+        super().__init__(owner, account_number, opening_balance)
 
     def withdraw(self, amount: Decimal) -> Transaction:
-        """Withdraw money without exceeding the configured overdraft limit."""
-        allowed_minimum = -self.overdraft_limit
-
+        """Withdraw without exceeding the configured overdraft limit."""
         return self._complete_withdrawal(
             amount,
-            allowed_minimum,
+            -self.overdraft_limit,
+        )
+
+    def _validate_transfer_out(self, amount: Decimal) -> Decimal:
+        """Validate an outgoing transfer using the overdraft allowance."""
+        return self._validate_withdrawal(
+            amount,
+            -self.overdraft_limit,
         )
