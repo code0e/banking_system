@@ -1,3 +1,12 @@
+"""Application service for LogicBank's in-memory banking operations.
+
+The service coordinates customer registration, account creation, ownership
+checks, deposits, withdrawals, transaction history, and statement generation.
+
+Storage is currently held in Python dictionaries. Data therefore exists only
+for the lifetime of the BankService instance; SQLite persistence, customer
+authentication, and money transfers are separate future implementation phases.
+"""
 
 import secrets
 from decimal import Decimal
@@ -13,27 +22,31 @@ from exceptions import (
 from models.customer import Customer
 from models.savings_account import SavingsAccount
 from models.current_account import CurrentAccount
+from models.transaction import Transaction
 
 
 class BankService:
-    """
-    Central service for managing LogicBank customers and accounts.
+    """Coordinate LogicBank's customer and account operations.
 
-    Current implementation uses in-memory storage.
-    SQLite persistence will be introduced in a later phase.
+    ``BankService`` acts as the application-facing layer between a user
+    interface and the domain models. It delegates monetary rules to account
+    objects rather than duplicating those rules here.
+
+    Notes:
+        This version uses in-memory dictionaries. Creating a new service
+        instance starts with an empty bank.
     """
 
     ACCOUNT_NUMBER_LENGTH = 10
     MAX_ACCOUNT_NUMBER_ATTEMPTS = 100
 
-    def __init__(self):
-        self._customers = {}
-        self._customers_by_email = {}
-        self._accounts = {}
+    def __init__(self) -> None:
+        """Create empty in-memory customer and account registries."""
+        self._customers: dict[str, Customer] = {}
+        self._customers_by_email: dict[str, str] = {}
+        self._accounts: dict[str, SavingsAccount | CurrentAccount] = {}
 
-    # -------------------------
     # CUSTOMER MANAGEMENT
-    # -------------------------
 
     def register_customer(
         self,
@@ -41,8 +54,11 @@ class BankService:
         email: str,
         phone: str = "",
     ) -> Customer:
-        """Register a new customer."""
+        """Validate and register a new customer.
 
+        Email addresses are normalized by the Customer model before they are
+        checked for duplicates.
+        """
         customer = Customer(
             full_name=full_name,
             email=email,
@@ -67,8 +83,7 @@ class BankService:
         return customer
 
     def get_customer(self, customer_id: str) -> Customer:
-        """Retrieve a customer using their unique ID."""
-
+        """Return a customer by unique ID or raise CustomerNotFoundError."""
         customer = self._customers.get(customer_id)
 
         if customer is None:
@@ -79,8 +94,7 @@ class BankService:
         return customer
 
     def get_customer_by_email(self, email: str) -> Customer:
-        """Retrieve a customer using their email address."""
-
+        """Return a customer by case-insensitive email address."""
         if not isinstance(email, str):
             raise CustomerNotFoundError(
                 "Customer could not be found."
@@ -97,18 +111,18 @@ class BankService:
 
         return self._customers[customer_id]
 
-    def list_customers(self):
-        """Return a read-only snapshot of registered customers."""
-
+    def list_customers(self) -> tuple[Customer, ...]:
+        """Return a tuple snapshot of all registered customers."""
         return tuple(self._customers.values())
 
-    # -------------------------
     # ACCOUNT NUMBER GENERATION
-    # -------------------------
 
     def _generate_account_number(self) -> str:
-        """Generate a unique ten-digit account number."""
+        """Generate an unused ten-digit account number.
 
+        A bounded retry count prevents an endless loop if the account-number
+        space ever becomes unexpectedly crowded.
+        """
         for _ in range(self.MAX_ACCOUNT_NUMBER_ATTEMPTS):
             number = str(
                 secrets.randbelow(9_000_000_000)
@@ -122,20 +136,16 @@ class BankService:
             "Unable to generate a unique account number."
         )
 
-    # -------------------------
     # ACCOUNT CREATION
-    # -------------------------
 
     def create_savings_account(
         self,
         customer_id: str,
-        opening_balance=Decimal("1000.00"),
-        minimum_balance=Decimal("1000.00"),
+        opening_balance: Decimal = Decimal("1000.00"),
+        minimum_balance: Decimal = Decimal("1000.00"),
     ) -> SavingsAccount:
-        """Create a savings account for a registered customer."""
-
+        """Create and register a savings account for an existing customer."""
         customer = self.get_customer(customer_id)
-
         account_number = self._generate_account_number()
 
         account = SavingsAccount(
@@ -146,19 +156,16 @@ class BankService:
         )
 
         self._accounts[account_number] = account
-
         return account
 
     def create_current_account(
         self,
         customer_id: str,
-        opening_balance=Decimal("0.00"),
-        overdraft_limit=Decimal("0.00"),
+        opening_balance: Decimal = Decimal("0.00"),
+        overdraft_limit: Decimal = Decimal("0.00"),
     ) -> CurrentAccount:
-        """Create a current account for a registered customer."""
-
+        """Create and register a current account for an existing customer."""
         customer = self.get_customer(customer_id)
-
         account_number = self._generate_account_number()
 
         account = CurrentAccount(
@@ -169,25 +176,26 @@ class BankService:
         )
 
         self._accounts[account_number] = account
-
         return account
 
-    # -------------------------
     # ACCOUNT MANAGEMENT
-    # -------------------------
 
     def get_account(
         self,
         account_number: str,
         customer_id: Optional[str] = None,
-    ):
-        """
-        Retrieve an account.
+    ) -> SavingsAccount | CurrentAccount:
+        """Retrieve an account and optionally verify its owner.
 
-        If customer_id is supplied, ownership is verified
-        before the account is returned.
-        """
+        Args:
+            account_number: Account to retrieve.
+            customer_id: When supplied, the account must belong to this
+                customer. Omitting it is intended for trusted internal use.
 
+        Raises:
+            AccountNotFoundError: If the account number is unknown.
+            AccountOwnershipError: If the supplied customer does not own it.
+        """
         account = self._accounts.get(account_number)
 
         if account is None:
@@ -205,9 +213,11 @@ class BankService:
 
         return account
 
-    def get_customer_accounts(self, customer_id: str):
-        """Return all accounts belonging to a customer."""
-
+    def get_customer_accounts(
+        self,
+        customer_id: str,
+    ) -> tuple[SavingsAccount | CurrentAccount, ...]:
+        """Return all accounts owned by a registered customer."""
         self.get_customer(customer_id)
 
         customer_accounts = [
@@ -219,84 +229,65 @@ class BankService:
         return tuple(customer_accounts)
 
     def get_total_customer_accounts(self, customer_id: str) -> int:
-        """Return the number of accounts owned by a customer."""
-
+        """Return the number of accounts belonging to one customer."""
         return len(self.get_customer_accounts(customer_id))
 
     def get_total_customers(self) -> int:
         """Return the number of registered customers."""
-
         return len(self._customers)
 
     def get_total_accounts(self) -> int:
         """Return the number of registered accounts."""
-
         return len(self._accounts)
 
-    # -------------------------
     # DEPOSIT OPERATIONS
-    # -------------------------
 
     def deposit(
         self,
         account_number: str,
         amount: Decimal,
         customer_id: Optional[str] = None,
-    ):
-        """
-        Deposit money into an account.
+    ) -> Transaction:
+        """Deposit money into an account after an optional ownership check.
 
-        The account model validates the amount and records
-        the successful deposit in its transaction history.
+        The account model validates the amount, updates the balance, and
+        creates the transaction record.
         """
-
         account = self.get_account(
             account_number,
             customer_id,
         )
 
-        account.deposit(amount)
+        return account.deposit(amount)
 
-        return account.transactions[-1]
-
-    # -------------------------
     # WITHDRAWAL OPERATIONS
-    # -------------------------
 
     def withdraw(
         self,
         account_number: str,
         amount: Decimal,
         customer_id: Optional[str] = None,
-    ):
-        """
-        Withdraw money from an account.
+    ) -> Transaction:
+        """Withdraw money after an optional ownership check.
 
-        The account model enforces its own withdrawal rules,
-        including savings minimum balances and current-account
-        overdraft limits.
+        The concrete account model enforces the applicable minimum-balance or
+        overdraft rule.
         """
-
         account = self.get_account(
             account_number,
             customer_id,
         )
 
-        account.withdraw(amount)
+        return account.withdraw(amount)
 
-        return account.transactions[-1]
-
-    # -------------------------
     # TRANSACTION HISTORY
-    # -------------------------
 
     def get_transaction_history(
         self,
         account_number: str,
         customer_id: Optional[str] = None,
-    ):
-        """Retrieve a read-only snapshot of an account's transactions."""
-
+    ) -> tuple[Transaction, ...]:
+        """Return the account's read-only transaction-history snapshot."""
         account = self.get_account(
             account_number,
             customer_id,
@@ -304,17 +295,18 @@ class BankService:
 
         return account.transactions
 
-    # -------------------------
     # ACCOUNT STATEMENTS
-    # -------------------------
 
     def generate_statement(
         self,
         account_number: str,
         customer_id: Optional[str] = None,
     ) -> str:
-        """Generate a readable statement for an account."""
+        """Build a printable text statement for an account.
 
+        The statement includes account details, recorded transactions,
+        transaction references, timestamps, and the current available balance.
+        """
         account = self.get_account(
             account_number,
             customer_id,
@@ -343,9 +335,7 @@ class BankService:
                 "%Y-%m-%d %H:%M:%S"
             )
 
-            transaction_type = (
-                transaction.transaction_type.value
-            )
+            transaction_type = transaction.transaction_type.value
 
             lines.append(
                 f"{timestamp} | "
