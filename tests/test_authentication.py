@@ -10,6 +10,7 @@ from database import Database
 from exceptions import (
     AccountOwnershipError,
     CustomerAlreadyExistsError,
+    AuthenticationRateLimitError,
     InvalidCredentialsError,
     SessionNotFoundError,
     WeakPasswordError,
@@ -44,6 +45,21 @@ class PasswordHasherTests(unittest.TestCase):
 
     def test_malformed_hash_data_fails_safely(self):
         self.assertFalse(PasswordHasher.verify_password("anything", "bad", "bad", 310000))
+
+    def test_untrusted_iteration_count_is_bounded(self):
+        salt, digest, _ = PasswordHasher.hash_password("SecurePass123!")
+        self.assertFalse(
+            PasswordHasher.verify_password("SecurePass123!", salt, digest, 2_000_001)
+        )
+        self.assertFalse(
+            PasswordHasher.verify_password("SecurePass123!", salt, digest, True)
+        )
+
+    def test_overlong_password_fails_verification_without_hashing(self):
+        salt, digest, iterations = PasswordHasher.hash_password("SecurePass123!")
+        self.assertFalse(
+            PasswordHasher.verify_password("A" * 129, salt, digest, iterations)
+        )
 
 
 class AuthenticationServiceTests(unittest.TestCase):
@@ -183,6 +199,34 @@ class AuthenticationServiceTests(unittest.TestCase):
         )
         with self.assertRaises(SessionNotFoundError):
             self.auth.deposit("invalid-session", account.account_number, Decimal("10.00"))
+
+    def test_repeated_failed_logins_trigger_temporary_lockout(self):
+        throttled = AuthService(
+            self.database,
+            session_lifetime=timedelta(hours=1),
+            max_login_attempts=2,
+            login_lockout=timedelta(milliseconds=500),
+        )
+        with self.assertRaises(InvalidCredentialsError):
+            throttled.login("ada@example.com", "WrongPass123!")
+        with self.assertRaises(AuthenticationRateLimitError):
+            throttled.login("ada@example.com", "WrongPass123!")
+        with self.assertRaises(AuthenticationRateLimitError):
+            throttled.login("ada@example.com", self.password)
+
+        time.sleep(0.55)
+        session = throttled.login("ada@example.com", self.password)
+        self.assertEqual(session.customer.customer_id, self.customer.customer_id)
+
+    def test_successful_login_resets_failed_attempt_counter(self):
+        throttled = AuthService(self.database, max_login_attempts=3)
+        with self.assertRaises(InvalidCredentialsError):
+            throttled.login("ada@example.com", "WrongPass123!")
+        throttled.login("ada@example.com", self.password)
+        with self.assertRaises(InvalidCredentialsError):
+            throttled.login("ada@example.com", "WrongPass123!")
+        with self.assertRaises(InvalidCredentialsError):
+            throttled.login("ada@example.com", "WrongPass123!")
 
     def test_active_session_count(self):
         self.assertEqual(self.auth.active_session_count(), 0)

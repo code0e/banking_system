@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 
 from exceptions import (
+    InvalidAmountError,
     AccountNotFoundError,
     AccountOwnershipError,
     InsufficientFundsError,
@@ -222,3 +223,11 @@ class TestBankingOperations(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MonetaryBoundaryTests(unittest.TestCase):
+    def test_extremely_large_decimal_is_rejected_cleanly(self):
+        from utils.validators import to_money
+
+        with self.assertRaises(InvalidAmountError):
+            to_money("1e100000")

@@ -19,6 +19,8 @@ class PasswordHasher:
 
     ALGORITHM = "pbkdf2_sha256"
     ITERATIONS = 310_000
+    MIN_ITERATIONS = 100_000
+    MAX_ITERATIONS = 2_000_000
     SALT_BYTES = 16
     HASH_BYTES = 32
     MIN_LENGTH = 10
@@ -57,28 +59,47 @@ class PasswordHasher:
         )
         return salt.hex(), digest.hex(), cls.ITERATIONS
 
-    @staticmethod
+    @classmethod
     def verify_password(
+        cls,
         password: str,
         salt_hex: str,
         expected_hash_hex: str,
         iterations: int,
     ) -> bool:
-        """Verify a password against stored salt, digest, and work factor."""
-        if not isinstance(password, str):
+        """Verify a stored hash while bounding untrusted input and CPU cost.
+
+        The iteration count is persisted with each credential. It must be
+        bounded before PBKDF2 is called so a corrupted or tampered database
+        cannot request an effectively unbounded amount of CPU work.
+        """
+        if not isinstance(password, str) or len(password) > cls.MAX_LENGTH:
             return False
+        if not isinstance(salt_hex, str) or len(salt_hex) != cls.SALT_BYTES * 2:
+            return False
+        if (
+            not isinstance(expected_hash_hex, str)
+            or len(expected_hash_hex) != cls.HASH_BYTES * 2
+        ):
+            return False
+        if (
+            isinstance(iterations, bool)
+            or not isinstance(iterations, int)
+            or not cls.MIN_ITERATIONS <= iterations <= cls.MAX_ITERATIONS
+        ):
+            return False
+
         try:
             salt = bytes.fromhex(salt_hex)
             expected = bytes.fromhex(expected_hash_hex)
-            if len(salt) != PasswordHasher.SALT_BYTES:
-                return False
-            if len(expected) != PasswordHasher.HASH_BYTES:
-                return False
-            if not isinstance(iterations, int) or iterations < 100_000:
+            if len(salt) != cls.SALT_BYTES or len(expected) != cls.HASH_BYTES:
                 return False
             actual = hashlib.pbkdf2_hmac(
-                "sha256", password.encode("utf-8"), salt, iterations,
-                dklen=len(expected),
+                "sha256",
+                password.encode("utf-8"),
+                salt,
+                iterations,
+                dklen=cls.HASH_BYTES,
             )
             return hmac.compare_digest(actual, expected)
         except (ValueError, TypeError, OverflowError):

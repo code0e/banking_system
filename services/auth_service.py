@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import secrets
+import time
 
 from database.connection import Database
 from exceptions import (
+    AuthenticationRateLimitError,
     CustomerAlreadyExistsError,
     InvalidCredentialsError,
     SessionNotFoundError,
@@ -46,9 +48,19 @@ class AuthService:
         database: Database,
         bank_service: BankService | None = None,
         session_lifetime: timedelta = timedelta(hours=1),
+        max_login_attempts: int = 5,
+        login_lockout: timedelta = timedelta(minutes=1),
     ) -> None:
         if session_lifetime.total_seconds() <= 0:
             raise ValueError("Session lifetime must be positive.")
+        if (
+            isinstance(max_login_attempts, bool)
+            or not isinstance(max_login_attempts, int)
+            or max_login_attempts < 1
+        ):
+            raise ValueError("Maximum login attempts must be a positive integer.")
+        if login_lockout.total_seconds() <= 0:
+            raise ValueError("Login lockout duration must be positive.")
         self.database = database
         self.database.initialize()
         self.user_repository = UserRepository(database)
@@ -59,6 +71,10 @@ class AuthService:
         if self.bank_service.database.path != database.path:
             raise ValueError("AuthService and BankService must share one database.")
         self.session_lifetime = session_lifetime
+        self.max_login_attempts = max_login_attempts
+        self.login_lockout = login_lockout
+        # email -> (failed attempts, monotonic time at which lockout ends)
+        self._login_failures: dict[str, tuple[int, float]] = {}
         self._sessions: dict[str, AuthSession] = {}
 
     def register(
@@ -94,18 +110,50 @@ class AuthService:
         return customer
 
     def login(self, email: str, password: str) -> AuthSession:
-        """Authenticate a customer and issue a random expiring session token."""
+        """Authenticate a customer with bounded failed-attempt throttling."""
         if not isinstance(email, str) or not isinstance(password, str):
             raise InvalidCredentialsError("Invalid email or password.")
-        record = self.user_repository.get_credentials_by_email(email)
-        if record is None or not PasswordHasher.verify_password(
-            password,
-            str(record["password_salt"]),
-            str(record["password_hash"]),
-            int(record["iterations"]),
-        ):
+
+        normalized_email = email.strip().lower()
+        now_monotonic = time.monotonic()
+        failures, blocked_until = self._login_failures.get(
+            normalized_email, (0, 0.0)
+        )
+        if now_monotonic < blocked_until:
+            raise AuthenticationRateLimitError(
+                "Too many failed login attempts. Please wait before trying again."
+            )
+        if blocked_until:
+            failures = 0
+            self._login_failures.pop(normalized_email, None)
+
+        record = self.user_repository.get_credentials_by_email(normalized_email)
+        valid = False
+        if record is not None:
+            try:
+                valid = PasswordHasher.verify_password(
+                    password,
+                    str(record["password_salt"]),
+                    str(record["password_hash"]),
+                    int(record["iterations"]),
+                )
+            except (TypeError, ValueError, KeyError, OverflowError):
+                # Corrupt credential rows must fail closed with the same
+                # public response as an incorrect password.
+                valid = False
+
+        if not valid:
+            failures += 1
+            if failures >= self.max_login_attempts:
+                blocked_until = now_monotonic + self.login_lockout.total_seconds()
+                self._login_failures[normalized_email] = (failures, blocked_until)
+                raise AuthenticationRateLimitError(
+                    "Too many failed login attempts. Please wait before trying again."
+                )
+            self._login_failures[normalized_email] = (failures, 0.0)
             raise InvalidCredentialsError("Invalid email or password.")
 
+        self._login_failures.pop(normalized_email, None)
         customer = Customer(
             full_name=str(record["full_name"]),
             email=str(record["email"]),

@@ -109,10 +109,15 @@ def to_money(value, allow_zero=False) -> Decimal:
 
     # Normalize the amount to two decimal places.
     # ROUND_HALF_UP rounds midpoint values away from zero.
-    amount = amount.quantize(
-        CENT,
-        rounding=ROUND_HALF_UP,
-    )
+    try:
+        amount = amount.quantize(
+            CENT,
+            rounding=ROUND_HALF_UP,
+        )
+    except InvalidOperation as error:
+        raise InvalidAmountError(
+            "Amount is outside the supported monetary range."
+        ) from error
 
     # Negative monetary values are not accepted for ordinary
     # deposits and withdrawals.

@@ -179,3 +179,8 @@ class WeakPasswordError(ValidationError):
 
 class SessionNotFoundError(AuthenticationError):
     """Raised when a session token is missing, invalid, or logged out."""
+
+
+
+class AuthenticationRateLimitError(AuthenticationError):
+    """Raised when repeated failed logins temporarily block an email."""

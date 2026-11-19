@@ -19,10 +19,10 @@ class Database:
     def connect(self) -> Iterator[sqlite3.Connection]:
         """Yield a configured connection and always close it."""
         connection = sqlite3.connect(self.path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 10000")
         try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("PRAGMA busy_timeout = 10000")
             yield connection
         finally:
             connection.close()

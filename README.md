@@ -115,3 +115,10 @@ Run the complete suite with `python -m unittest discover -s tests -v`. Tests cov
 ## Educational-use disclaimer
 
 This simulation has not been designed, audited, or approved to handle real customer funds or sensitive production banking data.
+
+
+## Phase 8 — Security hardening
+
+Phase 8 adds bounded password-hash verification, temporary throttling after
+repeated failed logins, safer SQLite connection cleanup, and stronger handling
+of extreme monetary input. See `PHASE_8_NOTES.md` for details and limitations.

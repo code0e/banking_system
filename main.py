@@ -14,7 +14,7 @@ def main() -> None:
     try:
         BankingCLI(auth_service).run()
     except (EOFError, KeyboardInterrupt):
-        print("\\nApplication closed. Thank you for using the Banking Management System.")
+        print("\nApplication closed. Thank you for using the Banking Management System.")
 
 
 if __name__ == "__main__":
