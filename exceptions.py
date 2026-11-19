@@ -1,4 +1,3 @@
-
 """
 Custom exception definitions for the LogicBank application.
 
@@ -164,3 +163,19 @@ class AccountNumberGenerationError(BankingError):
     process exhausts its permitted attempts without finding
     an unused number.
     """
+
+
+class AuthenticationError(BankingError):
+    """Base exception for authentication and session failures."""
+
+
+class InvalidCredentialsError(AuthenticationError):
+    """Raised when an email/password pair cannot be authenticated."""
+
+
+class WeakPasswordError(ValidationError):
+    """Raised when a password does not meet the application's policy."""
+
+
+class SessionNotFoundError(AuthenticationError):
+    """Raised when a session token is missing, invalid, or logged out."""

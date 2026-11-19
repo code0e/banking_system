@@ -1,4 +1,3 @@
-
 """
 Transaction model for the LogicBank banking application.
 

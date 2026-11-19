@@ -57,6 +57,20 @@ class BankAccount(ABC):
         """Return the current balance."""
         return self.__balance
 
+    def _restore_persisted_balance(self, balance: Decimal) -> None:
+        """Restore a stored balance, including a permitted current overdraft."""
+        if not isinstance(balance, Decimal) or not balance.is_finite():
+            raise AccountError("A finite Decimal balance is required.")
+        if balance != balance.quantize(Decimal("0.01")):
+            raise AccountError("Persisted balances cannot exceed two decimal places.")
+        self.__balance = balance
+
+    def _restore_persisted_transactions(self, transactions: tuple[Transaction, ...]) -> None:
+        """Restore transaction history loaded from persistent storage."""
+        if not all(isinstance(item, Transaction) for item in transactions):
+            raise AccountError("Persisted transaction history is invalid.")
+        self.__transactions = list(transactions)
+
     def deposit(self, amount: Decimal) -> Transaction:
         """Deposit a positive amount and record the successful operation."""
         amount = to_money(amount)

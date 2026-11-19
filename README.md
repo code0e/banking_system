@@ -1,160 +1,105 @@
-# LogicBank — Banking Management System
+# Banking Management System (`banking_system`)
 
-LogicBank is an educational banking-management project built with Python.
-It is designed to demonstrate object-oriented programming, monetary
-validation, custom exceptions, and separation between domain models and
-application services.
+An educational Python banking-management simulation demonstrating OOP, exact monetary arithmetic, SQLite persistence, repositories, transactions, and automated testing. This is a learning project, **not production banking software**.
 
-> **Project status:** The current implementation supports in-memory customer
-> and account management, savings/current account rules, deposits,
-> withdrawals, transaction history, and text statements. SQLite persistence,
-> authentication, transfers, and the interactive CLI are not yet implemented.
-> This is a learning project, not production banking software.
+## Features
 
-## Current features
-
-- Register customers and prevent duplicate email addresses.
-- Create savings and current accounts.
-- Generate unique ten-digit account numbers.
-- Keep customer and account data in memory.
-- Deposit and withdraw using `Decimal` monetary values.
-- Enforce savings minimum balances.
-- Support optional current-account overdrafts.
-- Verify account ownership when a customer ID is supplied.
-- Record deposits and withdrawals in transaction history.
-- Generate readable account statements in NGN.
-- Use custom exceptions for expected banking and validation errors.
-- Run automated tests with Python's built-in `unittest` framework.
-
-## Technology
-
-- Python
-- Object-oriented programming (OOP)
-- `Decimal` for monetary arithmetic
-- Python dictionaries for the current in-memory storage layer
-- `unittest` for automated tests
-
-No third-party package is required for the current implementation.
+- Customer registration and case-insensitive unique email addresses.
+- Savings and current accounts with configurable minimum-balance and overdraft rules.
+- Deposits, withdrawals, transaction history, statements, and transfers.
+- Ownership checks and custom banking exceptions.
+- Optional SQLite-backed persistence while retaining the original in-memory service mode.
+- Integer-kobo storage in SQLite; `Decimal` remains the domain representation.
+- Parameterized SQL, foreign keys, database constraints, indexes, and explicit commit/rollback handling.
+- Persistent paired transfer entries and balances written in one database transaction.
+- Customer authentication with salted PBKDF2-HMAC-SHA256 password hashing.
+- Separate credential storage; plaintext passwords are never stored.
+- Expiring in-memory sessions, logout, password changes, and session revocation.
+- Authenticated account-operation wrappers that enforce customer ownership.
 
 ## Project structure
 
 ```text
 banking_system/
-├── main.py
+├── database/                 # SQLite schema and connection manager
+├── models/                   # Customer, accounts, transactions
+├── repositories/             # Customer, account, transaction, credential persistence
+├── services/                 # BankService and AuthService
+├── utils/                    # Validation and password security
+├── tests/                    # Unit and persistence integration tests
 ├── exceptions.py
+├── main.py
 ├── README.md
-├── models/
-│   ├── __init__.py
-│   ├── account.py
-│   ├── customer.py
-│   ├── current_account.py
-│   ├── savings_account.py
-│   └── transaction.py
-├── services/
-│   ├── __init__.py
-│   └── bank_service.py
-├── utils/
-│   ├── __init__.py
-│   └── validators.py
-└── tests/
-    ├── __init__.py
-    ├── test_accounts.py
-    ├── test_bank_service.py
-    └── test_banking_operations.py
+├── PHASE_5_NOTES.md
+└── PHASE_6_NOTES.md
 ```
 
-## Architecture
+## Requirements and setup
 
-### `models/`
-
-Contains the banking domain objects and their rules.
-
-- `Customer` represents a bank customer.
-- `BankAccount` is the abstract base class shared by account types.
-- `SavingsAccount` enforces a minimum-balance rule.
-- `CurrentAccount` supports an optional overdraft limit.
-- `Transaction` represents a recorded account operation.
-
-### `services/`
-
-`BankService` coordinates customer registration, account creation, account
-lookups, ownership checks, deposits, withdrawals, transaction history, and
-statement generation. It delegates account-specific financial rules to the
-account models.
-
-### `utils/`
-
-Contains reusable input-validation helpers, including monetary conversion
-and non-empty string validation.
-
-### `exceptions.py`
-
-Defines the custom exception hierarchy used to communicate expected
-validation, customer, account, and balance errors.
-
-### `tests/`
-
-Contains automated tests for account models, customer/account management,
-and banking operations.
-
-## Setup
-
-1. Install Python 3.10 or newer.
-2. Open PowerShell in the project directory.
-3. (Optional) Create and activate a virtual environment:
+Python 3.10+ is sufficient. The project uses only the Python standard library.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-The current project uses only Python's standard library, so no package
-installation is required for the existing tests.
-
-## Run the tests
-
-From the project root:
-
-```powershell
+cd C:\Users\hp\Desktop\PYTHON\banking_system
 python -m unittest discover -s tests -v
 ```
 
-To run an individual test module:
+## Use persistent storage
 
-```powershell
-python -m unittest tests.test_accounts -v
-python -m unittest tests.test_bank_service -v
-python -m unittest tests.test_banking_operations -v
+`BankService()` keeps the original in-memory behavior. To enable SQLite persistence, supply a `Database` instance:
+
+```python
+from decimal import Decimal
+from database import Database
+from services.bank_service import BankService
+
+bank = BankService(Database("banking_system.db"))
+customer = bank.register_customer("Ada Lovelace", "ada@example.com")
+account = bank.create_current_account(customer.customer_id)
+bank.deposit(account.account_number, Decimal("250.00"))
 ```
 
-## Current implementation notes
+On the next application start, create a new service with the same database path; customers, accounts, balances, and transaction history are loaded automatically.
 
-- Customer and account records are stored in dictionaries owned by a
-  `BankService` instance.
-- Data is lost when the application process ends or a new service instance
-  is created.
-- The service methods accept an optional `customer_id` for ownership checks.
-  A future user-facing interface should always pass the authenticated
-  customer's ID for customer-initiated account operations.
-- `Decimal` is used for money; do not pass Python float values to monetary
-  methods.
-- The current statement is a formatted text representation, not a generated
-  PDF or downloadable bank document.
+## Customer authentication
 
-## Planned development phases
+Use `AuthService` with the same SQLite database as `BankService`. Passwords must contain 10–128 characters, including uppercase, lowercase, a number, and a special character. The application stores only a PBKDF2-HMAC-SHA256 digest, a unique random salt, and the work factor.
 
-1. Core account and customer models.
-2. Customer and account management.
-3. Deposits, withdrawals, and transaction history.
-4. Money transfers with atomicity and rollback.
-5. SQLite persistence and database constraints.
-6. Customer authentication and password hashing.
+```python
+from database import Database
+from services.auth_service import AuthService
+
+database = Database("banking_system.db")
+auth = AuthService(database)
+customer = auth.register(
+    "Ada Lovelace", "ada@example.com", "SecurePass123!"
+)
+session = auth.login("ada@example.com", "SecurePass123!")
+accounts = auth.get_customer_accounts(session.token)
+auth.logout(session.token)
+```
+
+Sessions are held in memory and expire after one hour by default. They are invalidated on application restart. Use the authenticated `AuthService` wrappers for customer-facing operations; those wrappers pass the authenticated customer ID into `BankService` ownership checks.
+
+## Monetary storage
+
+The domain layer uses `Decimal`. SQLite stores amounts as integer kobo (100 kobo = NGN 1.00), avoiding binary floating-point rounding. Do not pass Python `float` values to monetary methods.
+
+## Test coverage
+
+Run the complete suite with `python -m unittest discover -s tests -v`. Tests cover existing model/service/transfer behavior, database constraints and rollback, repository CRUD and reconstruction, restart persistence, overdraft restoration, transaction history, persisted transfers, password hashing, login, sessions, password changes, and authenticated ownership checks.
+
+## Development phases
+
+1. Core models — complete.
+2. Customer and account management — complete.
+3. Deposits, withdrawals, and transaction history — complete.
+4. Money transfers — complete.
+5. SQLite persistence — implementation and automated tests included here.
+6. Customer authentication and password hashing — implemented and tested.
 7. Interactive command-line interface.
-8. Expanded tests, security review, and error-handling improvements.
+8. Expanded security and error-handling review.
 9. Final documentation and release.
 
 ## Educational-use disclaimer
 
-LogicBank is a learning simulation. It has not been designed, audited, or
-approved for handling real customer funds or sensitive production banking
-data. Do not use it as a real banking platform.
+This simulation has not been designed, audited, or approved to handle real customer funds or sensitive production banking data.

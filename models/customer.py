@@ -1,4 +1,3 @@
-
 """
 Customer model for the LogicBank banking application.
 

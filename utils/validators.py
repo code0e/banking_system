@@ -1,4 +1,3 @@
-
 """
 Input validation and monetary normalization utilities.
 
