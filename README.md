@@ -1,124 +1,174 @@
-# Banking Management System (`banking_system`)
+# Banking Management System
 
-An educational Python banking-management simulation demonstrating OOP, exact monetary arithmetic, SQLite persistence, repositories, transactions, and automated testing. This is a learning project, **not production banking software**.
+**Project:** `banking_system`  
+**Release:** `1.0.0`  
+**Language:** Python  
+**Storage:** SQLite  
+**Interface:** Interactive command-line application
+
+An educational banking-management simulation built to demonstrate object-oriented programming, service/repository architecture, exact monetary arithmetic, relational persistence, authentication, transaction handling, and automated testing.
+
+> **Educational-use only.** This project is not production banking software. It is not designed, audited, or approved to hold real funds, process real payments, or store sensitive production customer information.
 
 ## Features
 
-- Customer registration and case-insensitive unique email addresses.
-- Savings and current accounts with configurable minimum-balance and overdraft rules.
-- Deposits, withdrawals, transaction history, statements, and transfers.
-- Ownership checks and custom banking exceptions.
-- Optional SQLite-backed persistence while retaining the original in-memory service mode.
-- Integer-kobo storage in SQLite; `Decimal` remains the domain representation.
-- Parameterized SQL, foreign keys, database constraints, indexes, and explicit commit/rollback handling.
-- Persistent paired transfer entries and balances written in one database transaction.
-- Customer authentication with salted PBKDF2-HMAC-SHA256 password hashing.
-- Separate credential storage; plaintext passwords are never stored.
-- Expiring in-memory sessions, logout, password changes, and session revocation.
-- Authenticated account-operation wrappers that enforce customer ownership.
-- Interactive terminal menus for registration, login, account management, and banking operations.
+### Customers and accounts
 
-## Project structure
+- Customer registration with case-insensitive unique email addresses.
+- Savings and current accounts.
+- Unique ten-digit account numbers.
+- Configurable savings minimum balance.
+- Configurable current-account overdraft limit (zero by default).
+- Customer account listing and account ownership checks.
 
-```text
-banking_system/
-├── database/                 # SQLite schema and connection manager
-├── models/                   # Customer, accounts, transactions
-├── repositories/             # Customer, account, transaction, credential persistence
-├── services/                 # BankService and AuthService
-├── utils/                    # Validation and password security
-├── tests/                    # Unit, persistence, authentication, and CLI tests
-├── cli/                      # Interactive terminal interface and formatters
-├── exceptions.py
-├── main.py
-├── README.md
-├── PHASE_5_NOTES.md
-└── PHASE_6_NOTES.md
+### Banking operations
+
+- Deposits and withdrawals.
+- Transfers between accounts, including accounts belonging to different customers.
+- Transaction history and account statements.
+- Matching transfer records for both sender and recipient.
+- Validation for zero, negative, non-finite, and floating-point monetary inputs.
+- Transfer rollback protection so a failed transfer does not leave a partial debit or credit.
+
+### Persistence and authentication
+
+- SQLite persistence for customers, credentials, accounts, balances, and transactions.
+- Integer-kobo monetary storage in SQLite; `Decimal` is used in the domain layer.
+- Parameterized SQL, foreign keys, database constraints, and indexes.
+- Explicit database transactions with commit/rollback handling.
+- Password hashing using PBKDF2-HMAC-SHA256 with a unique random salt.
+- In-memory expiring sessions, logout, password changes, and customer ownership enforcement.
+- Temporary login throttling after repeated failed attempts.
+
+### Command-line interface
+
+- Customer registration and login.
+- Customer dashboard and account creation.
+- Account dashboard with deposit, withdrawal, transfer, transaction history, and statement options.
+- Password change and logout.
+- NGN currency formatting and password input that is not echoed to the terminal.
+
+## Technology and requirements
+
+- Python 3.10 or newer.
+- SQLite (included with Python's standard library).
+- No third-party Python packages are required.
+
+Check your Python version:
+
+```powershell
+python --version
 ```
 
-## Run the interactive application
+## Installation and launch
 
-From the project root:
+1. Download and extract the project folder.
+2. Open PowerShell in the extracted `banking_system` directory.
+3. Run the application:
 
 ```powershell
 python main.py
 ```
 
-The application creates `banking_system.db` automatically. Customer data, accounts, balances, and transactions persist between runs. Login sessions are held in memory and must be re-created after restarting the application.
+The application initializes `banking_system.db` in the project root when it starts. Keep this file if you want to retain your local demonstration data. The database is excluded from source-control and release archives by `.gitignore`.
 
-## Requirements and setup
+## Run the automated tests
 
-Python 3.10+ is sufficient. The project uses only the Python standard library.
+From the project root:
 
 ```powershell
-cd C:\Users\hp\Desktop\PYTHON\banking_system
 python -m unittest discover -s tests -v
 ```
 
-## Use persistent storage
+The test suite covers account models, customer management, banking operations, transfer rules and rollback, SQLite schema and repositories, persistence across service restarts, password hashing, authentication, session expiry, ownership checks, login throttling, and CLI workflows.
 
-`BankService()` keeps the original in-memory behavior. To enable SQLite persistence, supply a `Database` instance:
+## Project structure
+
+```text
+banking_system/
+├── cli/
+│   ├── app.py                 # Interactive terminal menus and user input
+│   └── formatters.py          # NGN and account display formatting
+├── database/
+│   ├── connection.py          # SQLite connection and transaction handling
+│   ├── schema.py              # Schema initialization and migration support
+│   └── README.md              # Database implementation notes
+├── models/
+│   ├── account.py             # Abstract account and shared account behavior
+│   ├── current_account.py     # Current-account rules
+│   ├── customer.py            # Customer model
+│   ├── savings_account.py     # Savings-account rules
+│   └── transaction.py         # Transaction model and transaction types
+├── repositories/
+│   ├── account_repository.py
+│   ├── customer_repository.py
+│   ├── transaction_repository.py
+│   └── user_repository.py     # Credential persistence
+├── services/
+│   ├── auth_service.py       # Registration, login, sessions, ownership wrappers
+│   └── bank_service.py       # Customer, account, and banking workflows
+├── tests/                    # Automated unit and integration tests
+├── utils/
+│   ├── security.py            # Password hashing and verification
+│   └── validators.py          # Input and monetary validation
+├── exceptions.py              # Domain-specific exception hierarchy
+├── main.py                    # Application entry point
+├── README.md
+├── CHANGELOG.md
+├── SECURITY.md
+├── VERSION
+└── PHASE_*_NOTES.md
+```
+
+## How the application is organized
+
+The project separates responsibilities into layers:
+
+- **Models** represent customers, accounts, and transactions and enforce account-level rules.
+- **Repositories** read and write persisted records.
+- **Services** coordinate customer workflows, banking operations, authentication, and ownership checks.
+- **Database** manages SQLite connections, schema setup, and transaction boundaries.
+- **CLI** handles terminal input/output and delegates business rules to the services.
+- **Tests** verify behavior across models, services, persistence, authentication, and the interface.
+
+This separation keeps financial rules out of the terminal interface and makes the core behavior testable without interactive input.
+
+## Monetary precision
+
+The domain layer uses Python's `Decimal`; SQLite stores monetary values as integer kobo, where 100 kobo equals NGN 1.00. Python `float` values are deliberately rejected by monetary operations to avoid binary floating-point representation errors.
+
+Example for service-layer use:
 
 ```python
 from decimal import Decimal
-from database import Database
-from services.bank_service import BankService
 
-bank = BankService(Database("banking_system.db"))
-customer = bank.register_customer("Ada Lovelace", "ada@example.com")
-account = bank.create_current_account(customer.customer_id)
-bank.deposit(account.account_number, Decimal("250.00"))
+amount = Decimal("2500.50")
 ```
 
-On the next application start, create a new service with the same database path; customers, accounts, balances, and transaction history are loaded automatically.
+Do not construct money values from a float, for example `Decimal(2500.50)`. Use a string or an integer number of kobo where appropriate.
 
-## Customer authentication
+## Authentication notes
 
-Use `AuthService` with the same SQLite database as `BankService`. Passwords must contain 10–128 characters, including uppercase, lowercase, a number, and a special character. The application stores only a PBKDF2-HMAC-SHA256 digest, a unique random salt, and the work factor.
+Passwords are validated against the project's password policy and stored as PBKDF2-HMAC-SHA256 hashes with unique random salts. Plaintext passwords are not persisted. Sessions are stored in memory, expire after their configured lifetime, and are invalidated when the application process restarts.
 
-```python
-from database import Database
-from services.auth_service import AuthService
+The login throttling mechanism is an educational, in-memory per-process safeguard. It is not a distributed rate limiter and resets when the process restarts. See [SECURITY.md](SECURITY.md) for the security boundaries and responsible-use guidance.
 
-database = Database("banking_system.db")
-auth = AuthService(database)
-customer = auth.register(
-    "Ada Lovelace", "ada@example.com", "SecurePass123!"
-)
-session = auth.login("ada@example.com", "SecurePass123!")
-accounts = auth.get_customer_accounts(session.token)
-auth.logout(session.token)
-```
+## Development history
 
-Sessions are held in memory and expire after one hour by default. They are invalidated on application restart. Use the authenticated `AuthService` wrappers for customer-facing operations; those wrappers pass the authenticated customer ID into `BankService` ownership checks.
+The project was completed in nine development phases:
 
-## Monetary storage
+1. Core object-oriented account models.
+2. Customer and account management.
+3. Deposits, withdrawals, and transaction history.
+4. Money transfers.
+5. SQLite persistence.
+6. Customer authentication and password hashing.
+7. Interactive command-line interface.
+8. Security hardening, expanded tests, and error handling.
+9. Final documentation and release preparation.
 
-The domain layer uses `Decimal`. SQLite stores amounts as integer kobo (100 kobo = NGN 1.00), avoiding binary floating-point rounding. Do not pass Python `float` values to monetary methods.
+See the `PHASE_*_NOTES.md` files for implementation notes from the later phases.
 
-## Test coverage
+## Scope and disclaimer
 
-Run the complete suite with `python -m unittest discover -s tests -v`. Tests cover existing model/service/transfer behavior, database constraints and rollback, repository CRUD and reconstruction, restart persistence, overdraft restoration, transaction history, persisted transfers, password hashing, login, sessions, password changes, and authenticated ownership checks.
-
-## Development phases
-
-1. Core models — complete.
-2. Customer and account management — complete.
-3. Deposits, withdrawals, and transaction history — complete.
-4. Money transfers — complete.
-5. SQLite persistence — implementation and automated tests included here.
-6. Customer authentication and password hashing — implemented and tested.
-7. Interactive command-line interface — implemented with automated CLI tests.
-8. Expanded security and error-handling review.
-9. Final documentation and release.
-
-## Educational-use disclaimer
-
-This simulation has not been designed, audited, or approved to handle real customer funds or sensitive production banking data.
-
-
-## Phase 8 — Security hardening
-
-Phase 8 adds bounded password-hash verification, temporary throttling after
-repeated failed logins, safer SQLite connection cleanup, and stronger handling
-of extreme monetary input. See `PHASE_8_NOTES.md` for details and limitations.
+This project is intended for learning, demonstration, and portfolio purposes. It does not integrate with banks or payment processors. It does not implement regulatory compliance, production-grade identity verification, multi-factor authentication, encrypted backups, operational monitoring, or professionally audited security controls. Do not use it to manage real customer funds or sensitive production data.
