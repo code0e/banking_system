@@ -16,6 +16,7 @@ An educational Python banking-management simulation demonstrating OOP, exact mon
 - Separate credential storage; plaintext passwords are never stored.
 - Expiring in-memory sessions, logout, password changes, and session revocation.
 - Authenticated account-operation wrappers that enforce customer ownership.
+- Interactive terminal menus for registration, login, account management, and banking operations.
 
 ## Project structure
 
@@ -26,13 +27,24 @@ banking_system/
 ├── repositories/             # Customer, account, transaction, credential persistence
 ├── services/                 # BankService and AuthService
 ├── utils/                    # Validation and password security
-├── tests/                    # Unit and persistence integration tests
+├── tests/                    # Unit, persistence, authentication, and CLI tests
+├── cli/                      # Interactive terminal interface and formatters
 ├── exceptions.py
 ├── main.py
 ├── README.md
 ├── PHASE_5_NOTES.md
 └── PHASE_6_NOTES.md
 ```
+
+## Run the interactive application
+
+From the project root:
+
+```powershell
+python main.py
+```
+
+The application creates `banking_system.db` automatically. Customer data, accounts, balances, and transactions persist between runs. Login sessions are held in memory and must be re-created after restarting the application.
 
 ## Requirements and setup
 
@@ -96,7 +108,7 @@ Run the complete suite with `python -m unittest discover -s tests -v`. Tests cov
 4. Money transfers — complete.
 5. SQLite persistence — implementation and automated tests included here.
 6. Customer authentication and password hashing — implemented and tested.
-7. Interactive command-line interface.
+7. Interactive command-line interface — implemented with automated CLI tests.
 8. Expanded security and error-handling review.
 9. Final documentation and release.
 
